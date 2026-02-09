@@ -150,3 +150,6 @@ mc admin info myminio --insecure
 
 echo "Done."
 
+for i in {01..04}; do
+scp /etc/pki/minio/public.crt root@minio-vm-${i}:/etc/pki/minio/
+done
