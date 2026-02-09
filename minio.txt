@@ -1,0 +1,119 @@
+echo "SET HOST NAME"
+hostnamectl set-hostname minio-vm-01
+
+echo "SET HOSTS"
+cat <<EOF >> /etc/hosts
+10.40.153.61 minio-vm-01.metanetx.com minio-vm-01
+10.40.153.62 minio-vm-02.metanetx.com minio-vm-02
+10.40.153.63 minio-vm-03.metanetx.com minio-vm-03
+10.40.153.64 minio-vm-04.metanetx.com minio-vm-04
+10.40.153.65 minio.metanetx.com       minio-lb
+EOF
+
+echo " File System Mount..."
+
+mkfs.xfs -L MINIO_DATA /dev/sdx
+mkdir -p /mnt/minio_data{01..04}
+
+for i in {01..04}; do
+  echo "LABEL=MINIO_DATA${i} /mnt/minio_data${i} xfs defaults,noatime 0 2" | tee -a /etc/fstab
+done
+
+mount -a
+
+sleep 3;
+
+echo "MINIO Download.."
+curl -L https://dl.min.io/server/minio/release/linux-amd64/minio -o /usr/local/bin/minio
+chmod +x /usr/local/bin/minio
+
+echo " MINIO USER ADD..."
+useradd -r minio-user -s /sbin/nologin
+for i in {01..04} do
+chown -R minio-user:minio-user /mnt/minio_data{01..04}
+done
+
+echo " tls config"
+mkdir -p /etc/pki/minio
+mkdir -p ~/minio-certs && cd ~/minio-certs
+
+cat > openssl.conf <<EOF
+[req]
+distinguished_name = req_distinguished_name
+x509_extensions = v3_req
+prompt = no
+[req_distinguished_name]
+C = KR
+ST = Seoul
+L = Jongno
+O = MetanetX
+OU = HCU
+CN = minio.metanetx.com
+[v3_req]
+basicConstraints = critical, CA:TRUE
+keyUsage = critical, digitalSignature, keyEncipherment, keyCertSign
+extendedKeyUsage = serverAuth
+subjectAltName = @alt_names
+[alt_names]
+DNS.1 = minio.metanetx.com
+DNS.2 = *.metanetx.com
+DNS.3 = localhost
+IP.1 = 10.40.153.65
+IP.2 = 10.40.153.61
+IP.3 = 10.40.153.62
+IP.4 = 10.40.153.63
+IP.5 = 10.40.153.64
+IP.6 = 127.0.0.1
+EOF
+
+"Generate tls key..."
+openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
+  -keyout private.key -out public.crt -config openssl.conf
+
+sleep 1
+
+cp ~/minio-certs/public.crt /etc/pki/minio
+cp ~/minio-certs/private.key /etc/pki/minio
+
+echo "Make MINIO Service"
+cat <<EOF > /etc/default/minio
+MINIO_ROOT_USER=lokiadmin
+MINIO_ROOT_PASSWORD='1q2w3e4r!'
+MINIO_VOLUMES="https://minio-vm-{01...04}.metanetx.com/mnt/minio_data"
+# API:9000, Console:9001 
+MINIO_OPTS="--address :9000 --console-address :9001 --certs-dir /etc/pki/minio"
+EOF
+ 
+
+cat <<EOF > /etc/systemd/system/minio.service
+[Unit]
+Description=MinIO Distributed Cluster
+Documentation=https://docs.min.io
+Wants=network-online.target
+After=network-online.target
+AssertFileIsExecutable=/usr/local/bin/minio
+[Service]
+WorkingDirectory=/usr/local/
+User=minio-user
+Group=minio-user
+ProtectProc=invisible
+EnvironmentFile=/etc/default/minio
+ExecStart=/usr/local/bin/minio server \$MINIO_OPTS \$MINIO_VOLUMES
+Restart=always
+LimitNOFILE=65536
+TasksMax=infinity
+TimeoutStopSec=infinity
+SendSIGKILL=no
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now minio
+systemctl status minio
+
+echo "MINIO Started."
+
+curl https://dl.min.io/client/mc/release/linux-amd64/mc   --create-dirs   -o /usr/local/bin/mc && chmod +x /usr/local/bin/mc
+mc alias set myminio https://minio.metanetx.com:9000 lokiadmin '1q2w3e4r!'
+mc admin info myminio 
