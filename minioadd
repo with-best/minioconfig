@@ -1,14 +1,10 @@
 #!/bin/bash
-set -e  # 에러 발생 시 즉시 중단
+set -e 
 
-# ==========================================
-# 1. 변수 설정 (환경에 맞게 변경 필요)
-# ==========================================
-# 주의: 이 스크립트를 실행하는 서버의 번호에 맞게 호스트네임을 설정하세요.
 CURRENT_HOSTNAME="minio-vm-01" 
 MINIO_VERSION="latest"
 MINIO_USER="minio-user"
-MINIO_PASS="1q2w3e4r!"  # 특수문자 처리를 위해 작은따옴표 필수
+MINIO_PASS='1q2w3e4r!'
 
 echo "=== 1. Hostname & Hosts 설정 ==="
 hostnamectl set-hostname $CURRENT_HOSTNAME
@@ -25,14 +21,11 @@ EOF
 fi
 
 echo "=== 2. File System & Mount ==="
-# 주의: 실제 디스크가 4개인지 확인 필요. 여기서는 예시로 /dev/sd{b,c,d,e}라고 가정하거나
-# 혹은 단일 디스크라면 파티셔닝이 선행되어야 합니다.
-# 자동 포맷은 위험하므로 주석 처리합니다. 필요시 주석 해제 후 디바이스명(/dev/sdX) 수정하세요.
 
 mkfs.xfs -f -L MINIO_DATA01 /dev/sdb
 mkfs.xfs -f -L MINIO_DATA02 /dev/sdc
 mkfs.xfs -f -L MINIO_DATA03 /dev/sdd
-mkfs.xfs -f -L MINIO_DATA03 /dev/sde
+mkfs.xfs -f -L MINIO_DATA04 /dev/sde
 
 # 마운트 포인트 생성
 mkdir -p /mnt/minio_data{01..04}
@@ -59,9 +52,6 @@ for i in {01..04}; do
 done
 
 
-# 인증서 복사 및 **권한 설정 (매우 중요)**
-cp public.crt /etc/pki/minio/public.crt
-# MinIO 유저가 읽을 수 있어야 함!
 chown -R $MINIO_USER:$MINIO_USER /etc/pki/minio
 
 echo "=== 5. MinIO 설정 파일 생성 ==="
@@ -109,7 +99,7 @@ echo "=== 7. mc 클라이언트 설정 ==="
 curl https://dl.min.io/client/mc/release/linux-amd64/mc --create-dirs -o /usr/local/bin/mc 
 chmod +x /usr/local/bin/mc
 
-# --insecure 추가 (사설 인증서(Self-signed) 사용 시 필수)
+# --insecure 추가
 mc alias set myminio https://minio.metanetx.com:9000 lokiadmin '$MINIO_PASS' --insecure
 mc admin info myminio --insecure
 
