@@ -4,16 +4,14 @@ set -e  # 에러 발생 시 즉시 중단
 # ==========================================
 # 1. 변수 설정 (환경에 맞게 변경 필요)
 # ==========================================
-# 주의: 이 스크립트를 실행하는 서버의 번호에 맞게 호스트네임을 설정하세요.
 CURRENT_HOSTNAME="minio-vm-01" 
 MINIO_VERSION="latest"
 MINIO_USER="minio-user"
-MINIO_PASS="1q2w3e4r!"  # 특수문자 처리를 위해 작은따옴표 필수
+MINIO_PASS='1q2w3e4r!'
 
 echo "=== 1. Hostname & Hosts 설정 ==="
 hostnamectl set-hostname $CURRENT_HOSTNAME
 
-# /etc/hosts 중복 방지 로직 추가
 if ! grep -q "minio-vm-01" /etc/hosts; then
 cat <<EOF >> /etc/hosts
 10.40.153.61 minio-vm-01.metanetx.com minio-vm-01
@@ -25,13 +23,10 @@ EOF
 fi
 
 echo "=== 2. File System & Mount ==="
-# 주의: 실제 디스크가 4개인지 확인 필요. 여기서는 예시로 /dev/sd{b,c,d,e}라고 가정하거나
-# 혹은 단일 디스크라면 파티셔닝이 선행되어야 합니다.
-# 자동 포맷은 위험하므로 주석 처리합니다. 필요시 주석 해제 후 디바이스명(/dev/sdX) 수정하세요.
-
-# mkfs.xfs -f -L MINIO_DATA01 /dev/sdb
-# mkfs.xfs -f -L MINIO_DATA02 /dev/sdc
-# ...
+mkfs.xfs -f -L MINIO_DATA01 /dev/sdb
+mkfs.xfs -f -L MINIO_DATA02 /dev/sdc
+mkfs.xfs -f -L MINIO_DATA03 /dev/sdd
+mkfs.xfs -f -L MINIO_DATA04 /dev/sde
 
 # 마운트 포인트 생성
 mkdir -p /mnt/minio_data{01..04}
@@ -45,17 +40,15 @@ for i in {01..04}; do
   fi
 done
 
-# mount -a  # 실제 디스크 라벨이 없으면 에러가 나므로 일단 주석 처리
+mount -a  # 실제 디스크 라벨이 없으면 에러가 나므로 일단 주석 처리
 
 echo "=== 3. MinIO 다운로드 및 사용자 생성 ==="
 curl -L https://dl.min.io/server/minio/release/linux-amd64/minio -o /usr/local/bin/minio
 chmod +x /usr/local/bin/minio
 
-# 사용자 존재 여부 확인 후 생성
+
 id -u $MINIO_USER &>/dev/null || useradd -r $MINIO_USER -s /sbin/nologin
 
-# 권한 부여 (수정됨: 문법 에러 해결)
-# for 문 뒤에 세미콜론(;) 빠진 것 수정
 for i in {01..04}; do
     chown -R $MINIO_USER:$MINIO_USER /mnt/minio_data${i}
 done
@@ -156,3 +149,4 @@ mc alias set myminio https://minio.metanetx.com:9000 lokiadmin '$MINIO_PASS' --i
 mc admin info myminio --insecure
 
 echo "Done."
+
