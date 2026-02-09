@@ -33,19 +33,16 @@ mkdir -p /mnt/minio_data{01..04}
 
 # fstab 등록 (중복 방지)
 for i in {01..04}; do
-  # 실제로는 디스크가 마운트 되어야 하므로 LABEL이나 UUID가 정확해야 합니다.
-  # 테스트용으로 폴더만 만든 상태라면 이 부분은 실제 마운트 시에만 유효합니다.
   if ! grep -q "/mnt/minio_data${i}" /etc/fstab; then
       echo "LABEL=MINIO_DATA${i} /mnt/minio_data${i} xfs defaults,noatime 0 2" | tee -a /etc/fstab
   fi
 done
 
-mount -a  # 실제 디스크 라벨이 없으면 에러가 나므로 일단 주석 처리
+mount -a 
 
 echo "=== 3. MinIO 다운로드 및 사용자 생성 ==="
 curl -L https://dl.min.io/server/minio/release/linux-amd64/minio -o /usr/local/bin/minio
 chmod +x /usr/local/bin/minio
-
 
 id -u $MINIO_USER &>/dev/null || useradd -r $MINIO_USER -s /sbin/nologin
 
@@ -96,10 +93,13 @@ cp public.crt /etc/pki/minio/public.crt
 cp private.key /etc/pki/minio/private.key
 # MinIO 유저가 읽을 수 있어야 함!
 chown -R $MINIO_USER:$MINIO_USER /etc/pki/minio
+for i in {01..04}; do
+scp /etc/pki/minio/public.crt root@minio-vm-${i}:/etc/pki/minio/
+scp /etc/pki/minio/private.key root@minio-vm-${i}:/etc/pki/minio/
+done
+
 
 echo "=== 5. MinIO 설정 파일 생성 ==="
-# 수정됨: 점 3개(...) -> 점 2개(..)
-# 수정됨: https 프로토콜과 포트 명시 권장
 cat <<EOF > /etc/default/minio
 MINIO_ROOT_USER=lokiadmin
 MINIO_ROOT_PASSWORD='$MINIO_PASS'
@@ -150,7 +150,6 @@ mc admin info myminio --insecure
 
 echo "Done."
 
-for i in {01..04}; do
-scp /etc/pki/minio/public.crt root@minio-vm-${i}:/etc/pki/minio/
-done
+
+
 
