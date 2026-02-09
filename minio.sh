@@ -103,7 +103,7 @@ echo "=== 5. MinIO 설정 파일 생성 ==="
 cat <<EOF > /etc/default/minio
 MINIO_ROOT_USER=lokiadmin
 MINIO_ROOT_PASSWORD='$MINIO_PASS'
-MINIO_VOLUMES="https://minio-vm-{01..04}.metanetx.com:9000/mnt/minio_data{01..04}"
+MINIO_VOLUMES="https://minio-vm-{01...04}.metanetx.com:9000/mnt/minio_data{01...04}"
 MINIO_OPTS="--address :9000 --console-address :9001 --certs-dir /etc/pki/minio"
 EOF
 
@@ -153,3 +153,4 @@ echo "Done."
 for i in {01..04}; do
 scp /etc/pki/minio/public.crt root@minio-vm-${i}:/etc/pki/minio/
 done
+
